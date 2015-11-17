@@ -57,7 +57,7 @@ def init(confdict, configurator, kvcache_conf, ctx_conf=None):
     >>> request.db.query(User).first()
     """
     session_conf = score.session.init(confdict, kvcache_conf, ctx_conf)
-    session_conf.create = lambda: PyramidSession(session_conf)
+    session_conf.create = lambda: PyramidSession(session_conf, None)
     session_conf.load = lambda id: PyramidSession(session_conf, id)
     if session_conf.ctx_member:
         conf = defaults.copy()
