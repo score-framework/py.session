@@ -41,7 +41,7 @@ setup(
     author_email='score@strg.at',
     url='http://score-framework.org',
     keywords='score framework web session',
-    packages=['score.session'],
+    packages=['score', 'score.session'],
     namespace_packages=['score'],
     zip_safe=False,
     license='LGPL',
