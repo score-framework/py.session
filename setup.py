@@ -61,7 +61,7 @@ setup(
         'Topic :: Software Development :: Libraries :: Application Frameworks',
     ],
     install_requires=[
-        'score.init >= 0.1',
-        'score.kvcache >= 0.1',
+        'score.init >= 0.3',
+        'score.kvcache >= 0.1.7',
     ],
 )
