@@ -126,7 +126,7 @@ class ConfiguredSessionModule(ConfiguredModule):
         """
         Creates a new, empty :class:`.Session`.
         """
-        return Session(self)
+        return Session(self, None)
 
     def load(self, id):
         """
