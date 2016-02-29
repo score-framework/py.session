@@ -25,7 +25,7 @@
 # Licensee has his registered seat, an establishment or assets.
 
 import score.kvcache as kvcache
-from score.init import ConfiguredModule, parse_bool
+from score.init import ConfiguredModule, parse_bool, parse_time_interval
 import uuid
 
 
@@ -34,6 +34,11 @@ defaults = {
     'kvcache.container': 'score.session',
     'ctx.member': 'session',
     'cookie': 'session',
+    'cookie.max_age': None,
+    'cookie.path': None,
+    'cookie.domain': None,
+    'cookie.secure': True,
+    'cookie.httponly': True,
 }
 
 
@@ -59,7 +64,35 @@ def init(confdict, kvcache, ctx=None):
         one).
 
     :confkey:`cookie` :faint:`[default=session]`
-        TODO: document me
+        Name of the cookie to set when used in combination with the
+        :mod:`score.http` module. It is recommended to provide a non-default,
+        obscure value here.  Setting this value to the string `None` will
+        disable setting cookies.
+
+    :confkey:`cookie.max_age` :faint:`[default=None]`
+        The max-age parameter of the cookie. The default value of `None` means
+        that the cookie will be valid until the browser is closed.
+
+    :confkey:`cookie.path` :faint:`[default=None]`
+        The path parameter of the cookie.
+
+    :confkey:`cookie.domain` :faint:`[default=None]`
+        The domain parameter of the cookie.
+
+    :confkey:`cookie.secure` :faint:`[default=True]`
+        The secure parameter of the cookie. Please be aware that you are
+        exposing your user sessions to man-in-the-middle__ attacks (like
+        wireless sniffers), if you set this value to `False` in production.
+
+        .. __: https://en.wikipedia.org/wiki/Man-in-the-middle_attack
+
+    :confkey:`cookie.httponly` :faint:`[default=True]`
+        The httponly parameter of the cookie. Please be aware that setting this
+        value to `False` in production can lead to session hijacking, if an
+        attacker manages to sneak in malicious javascript code into your
+        application (using XSS_, for example).
+
+        .. _XSS: https://en.wikipedia.org/wiki/Cross-site_scripting
 
     """
     conf = defaults.copy()
@@ -69,8 +102,20 @@ def init(confdict, kvcache, ctx=None):
     ctx_member = None
     if ctx and conf['ctx.member'] not in (None, 'None'):
         ctx_member = conf['ctx.member']
+    cookie_kwargs = None
+    if conf['cookie'] and conf['cookie'] != 'None':
+        cookie_kwargs = {
+            'name': conf['cookie'],
+            'path': conf['cookie.path'],
+            'domain': conf['cookie.domain'],
+            'secure': parse_bool(conf['cookie.secure']),
+            'httponly': parse_bool(conf['cookie.httponly']),
+        }
+        if conf['cookie.max_age']:
+            cookie_kwargs['cookie.max_age'] = \
+                parse_time_interval(conf['cookie.max_age'])
     return ConfiguredSessionModule(
-        container, livedata, ctx, ctx_member, conf['cookie'])
+        container, livedata, ctx, ctx_member, cookie_kwargs)
 
 
 class ConfiguredSessionModule(ConfiguredModule):
@@ -79,13 +124,13 @@ class ConfiguredSessionModule(ConfiguredModule):
     <score.init.ConfiguredModule>`.
     """
 
-    def __init__(self, cache, livedata, ctx, ctx_member, cookie_name):
+    def __init__(self, cache, livedata, ctx, ctx_member, cookie_kwargs):
         super().__init__(__package__)
         self.cache = cache
         self.livedata = livedata
         self.ctx = ctx
         self.ctx_member = ctx_member
-        self.cookie_name = cookie_name
+        self.cookie_kwargs = cookie_kwargs
         if ctx and ctx_member:
             self.__register_ctx_member()
 
@@ -95,9 +140,10 @@ class ConfiguredSessionModule(ConfiguredModule):
         def constructor(ctx):
             if hasattr(ctx, id_member):
                 return self.load(getattr(ctx, id_member))
-            if hasattr(ctx, 'http'):
+            if self.cookie_kwargs and hasattr(ctx, 'http'):
                 return self.load(
-                    ctx.http.request.cookies.get(self.cookie_name, None))
+                    ctx.http.request.cookies.get(self.cookie_kwargs['name'],
+                                                 None))
             return self.create()
 
         def destructor(ctx, session, exception):
@@ -107,18 +153,11 @@ class ConfiguredSessionModule(ConfiguredModule):
                     session.revert()
                 else:
                     session.store()
-            if hasattr(ctx, 'http') and not exception:
+            if self.cookie_kwargs and hasattr(ctx, 'http') and not exception:
                 if session._original_id is None:
-                    ctx.http.response.set_cookie(
-                        self.cookie_name,
-                        value=session.id,
-                        # TODO
-                        # max_age=self._cookie_max_age,
-                        # path=self._cookie_path,
-                        # domain=self._cookie_domain,
-                        # secure=self._cookie_secure,
-                        # httponly=self._cookie_httponly,
-                    )
+                    kwargs = self.cookie_kwargs.copy()
+                    kwargs['value'] = session.id
+                    ctx.http.response.set_cookie(**kwargs)
 
         self.ctx.register(self.ctx_member, constructor, destructor)
 
