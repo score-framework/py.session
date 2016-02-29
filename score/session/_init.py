@@ -133,6 +133,29 @@ class ConfiguredSessionModule(ConfiguredModule):
         self.cookie_kwargs = cookie_kwargs
         if ctx and ctx_member:
             self.__register_ctx_member()
+        if 'max_age' in cookie_kwargs:
+            # keep the client's cookie alive by sending him the cookie with each
+            # response
+            id_member = self.ctx_member + '_id'
+
+            @ctx.on_destroy
+            def destructor(ctx, exception):
+                if exception:
+                    return
+                if not hasattr(ctx, 'http'):
+                    return
+                if hasattr(ctx, self.ctx_member):
+                    session_id = getattr(ctx, ctx_member).id
+                elif hasattr(ctx, id_member):
+                    session_id = getattr(ctx, id_member)
+                elif self.cookie_kwargs and hasattr(ctx, 'http'):
+                    session_id = ctx.http.request.cookies.get(
+                        self.cookie_kwargs['name'], None)
+                else:
+                    return
+                kwargs = self.cookie_kwargs.copy()
+                kwargs['value'] = str(session_id)
+                ctx.http.response.set_cookie(**kwargs)
 
     def __register_ctx_member(self):
         id_member = self.ctx_member + '_id'
@@ -153,6 +176,11 @@ class ConfiguredSessionModule(ConfiguredModule):
                     session.revert()
                 else:
                     session.store()
+            if 'max_age' in self.cookie_kwargs:
+                # the next part is only relevant if we are not setting the
+                # response cookie anyway in the global context destruction
+                # listener (see __init__() of this class)
+                return
             if self.cookie_kwargs and hasattr(ctx, 'http') and not exception:
                 if session._original_id is None:
                     kwargs = self.cookie_kwargs.copy()
