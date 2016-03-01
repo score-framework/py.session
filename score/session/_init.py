@@ -146,6 +146,8 @@ class Session:
 
     def __init__(self, conf, id):
         self._conf = conf
+        if not id:
+            id = None
         self.id = id
         self._original_id = id
         self._changed = False
