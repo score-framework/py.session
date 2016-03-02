@@ -34,7 +34,7 @@ with open(os.path.join(here, 'README.rst')) as f:
 
 setup(
     name='score.session',
-    version='0.3',
+    version='0.3.1',
     description='Session management for The SCORE Framework',
     long_description=README,
     author='strg.at',
@@ -61,7 +61,7 @@ setup(
         'Topic :: Software Development :: Libraries :: Application Frameworks',
     ],
     install_requires=[
-        'score.init >= 0.3',
+        'score.init >= 0.3.1',
         'score.kvcache >= 0.1.7',
     ],
 )
