@@ -112,7 +112,7 @@ def init(confdict, kvcache, ctx=None):
             'httponly': parse_bool(conf['cookie.httponly']),
         }
         if conf['cookie.max_age']:
-            cookie_kwargs['cookie.max_age'] = \
+            cookie_kwargs['max_age'] = \
                 parse_time_interval(conf['cookie.max_age'])
     return ConfiguredSessionModule(
         container, livedata, ctx, ctx_member, cookie_kwargs)
