@@ -218,7 +218,7 @@ class Session:
         else:
             # validate cookie id
             try:
-                self._conf.cache[self.id]
+                self._conf.cache[id]
             except kvcache.NotFound:
                 id = None
         self.id = id
