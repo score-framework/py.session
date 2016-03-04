@@ -215,6 +215,12 @@ class Session:
         self._conf = conf
         if not id:
             id = None
+        else:
+            # validate cookie id
+            try:
+                self._conf.cache[self.id]
+            except kvcache.NotFound:
+                id = None
         self.id = id
         self._original_id = id
         self._changed = False
