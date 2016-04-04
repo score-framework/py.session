@@ -34,7 +34,7 @@ with open(os.path.join(here, 'README.rst')) as f:
 
 setup(
     name='score.session',
-    version='0.3.4',
+    version='0.3.5',
     description='Session management for The SCORE Framework',
     long_description=README,
     author='strg.at',
