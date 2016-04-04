@@ -35,7 +35,7 @@ defaults = {
     'ctx.member': 'session',
     'cookie': 'session',
     'cookie.max_age': None,
-    'cookie.path': None,
+    'cookie.path': '/',
     'cookie.domain': None,
     'cookie.secure': True,
     'cookie.httponly': True,
