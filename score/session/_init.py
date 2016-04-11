@@ -73,7 +73,7 @@ def init(confdict, kvcache, ctx=None):
         The max-age parameter of the cookie. The default value of `None` means
         that the cookie will be valid until the browser is closed.
 
-    :confkey:`cookie.path` :faint:`[default=None]`
+    :confkey:`cookie.path` :faint:`[default=/]`
         The path parameter of the cookie.
 
     :confkey:`cookie.domain` :faint:`[default=None]`
@@ -317,10 +317,14 @@ class Session:
 
     def update(self, other):
         self._data.update(other)
+        if self._conf.livedata:
+            self.store()
 
     def clear(self):
         self._changed = True
         self._data.clear()
+        if self._conf.livedata:
+            self.store()
 
     def was_changed(self):
         return self._changed
