@@ -1,12 +1,30 @@
-from sqlalchemy import Column, String, PickleType, exists
+from sqlalchemy import Column, String, exists
 from ._init import Session
 from itertools import chain
 from sqlalchemy.orm.attributes import flag_modified
+from sqlalchemy.types import TypeDecorator, VARCHAR
+import json
+
+
+class JSONDict(TypeDecorator):
+    "Represents an immutable structure as a json-encoded string."
+
+    impl = VARCHAR
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            value = json.dumps(value)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            value = json.loads(value)
+        return value
 
 
 class DbSessionMixin:
     _uuid = Column(String(36), nullable=False, unique=True)
-    _data = Column(PickleType, nullable=False)
+    _data = Column(JSONDict, nullable=False)
 
 
 class DbSession(Session):
