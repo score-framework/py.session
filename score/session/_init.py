@@ -280,7 +280,7 @@ class Session(abc.ABC):
     """
     A dict-like object managing session data. The modified session information
     is persisted when this object is destroyed. You can also call
-    :meth:`.store()` manually to make the data of this session available to
+    :meth:`.store` manually to make the data of this session available to
     other processes.
     """
 
