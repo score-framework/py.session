@@ -151,6 +151,7 @@ def _init_db_backend(conf, session, db, ctx):
     return type('ConfiguredDbSession', (DbSession,), {
         '_has_ctx': ctx is not None,
         '_conf': session,
+        '_db_conf': db,
         '_db_class': class_,
         '_db': property(session),
     })
@@ -226,6 +227,15 @@ class ConfiguredSessionModule(ConfiguredModule):
         id_member = self.ctx_member + '_id'
 
         def constructor(ctx):
+            if hasattr(self.Session, '_db_conf'):
+                if self.Session._db_conf.ctx_member:
+                    # if we are making use of score.db's context member, we must
+                    # make sure it is initialized before this context member.
+                    # otherwise the database session (ctx.db) might get
+                    # destroyed before this member (ctx.session), in which case
+                    # we would have no database session to persist our session
+                    # object with.
+                    getattr(ctx, self.Session._db_conf.ctx_member)
             if hasattr(ctx, id_member):
                 return self.load(getattr(ctx, id_member), ctx)
             if self.cookie_kwargs and hasattr(ctx, 'http'):
