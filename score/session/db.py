@@ -1,40 +1,12 @@
 from sqlalchemy import Column, String, PickleType, exists
-from sqlalchemy.ext.mutable import Mutable
 from ._init import Session
 from itertools import chain
+from sqlalchemy.orm.attributes import flag_modified
 
 
 class DbSessionMixin:
     _uuid = Column(String(36), nullable=False, unique=True)
     _data = Column(PickleType, nullable=False)
-
-
-class MutableDict(Mutable, dict):
-
-    @classmethod
-    def coerce(cls, key, value):
-        "Convert plain dictionaries to MutableDict."
-
-        if not isinstance(value, MutableDict):
-            if isinstance(value, dict):
-                return MutableDict(value)
-
-            # this call will raise ValueError
-            return Mutable.coerce(key, value)
-        else:
-            return value
-
-    def __setitem__(self, key, value):
-        "Detect dictionary set events and emit change events."
-
-        dict.__setitem__(self, key, value)
-        self.changed()
-
-    def __delitem__(self, key):
-        "Detect dictionary del events and emit change events."
-
-        dict.__delitem__(self, key)
-        self.changed()
 
 
 class DbSession(Session):
@@ -56,13 +28,14 @@ class DbSession(Session):
                     first()
             else:
                 self.__db_object = self._db_class(
-                    _data=MutableDict()
+                    _data=dict()
                 )
         return self.__db_object
 
     def _store(self):
         self._db_object._uuid = self.id
         self._db.add(self._db_object)
+        flag_modified(self._db_object, '_data')
 
     def _revert(self):
         # will be handled by transaction rollback
@@ -86,7 +59,7 @@ class DbSession(Session):
     def _get(self, key):
         if hasattr(self._db_object, key):
             return getattr(self._db_object, key)
-        return self._db_object[key]
+        return self._db_object._data[key]
 
     def _iter(self):
         return chain((col.name
