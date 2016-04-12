@@ -109,7 +109,7 @@ def init(confdict, db=None, kvcache=None, ctx=None):
         ctx_member = conf['ctx.member']
     cookie_kwargs = parse_cookie_kwargs(conf)
     session = ConfiguredSessionModule(ctx, ctx_member, cookie_kwargs)
-    session.Session = _init_db_backend(conf, session, db)
+    session.Session = _init_db_backend(conf, session, db, ctx)
     if not session.Session:
         session.Session = _init_kvcache_backend(conf, session, kvcache)
         if not session.Session:
@@ -119,7 +119,7 @@ def init(confdict, db=None, kvcache=None, ctx=None):
     return session
 
 
-def _init_db_backend(conf, session, db):
+def _init_db_backend(conf, session, db, ctx):
     if not db:
         return None
     if 'db.class' not in conf:
@@ -133,17 +133,23 @@ def _init_db_backend(conf, session, db):
         import score.session
         raise ConfigurationError(
             score.session, 'Configured `db.class` must inherit DbSessionMixin')
-    if db.ctx_member:
+    if ctx and db.ctx_member:
         def session(self):
             return getattr(self._ctx, db.ctx_member)
-    else:
+    elif ctx:
         def session(self):
             if not hasattr(self, '_db_session'):
                 zope_tx = ZopeTransactionExtension(
                     transaction_manager=self._ctx.tx_manager)
                 self._db_session = db.Session(extension=zope_tx)
             return self._db_session
+    else:
+        def session(self):
+            if not hasattr(self, '_db_session'):
+                self._db_session = db.Session(extension=[])
+            return self._db_session
     return type('ConfiguredDbSession', (DbSession,), {
+        '_has_ctx': ctx is not None,
         '_conf': session,
         '_db_class': class_,
         '_db': property(session),
@@ -221,11 +227,11 @@ class ConfiguredSessionModule(ConfiguredModule):
 
         def constructor(ctx):
             if hasattr(ctx, id_member):
-                return self.load(ctx, getattr(ctx, id_member))
+                return self.load(getattr(ctx, id_member), ctx)
             if self.cookie_kwargs and hasattr(ctx, 'http'):
                 id = ctx.http.request.cookies.get(
                     self.cookie_kwargs['name'], None)
-                return self.load(ctx, id)
+                return self.load(id, ctx)
             return self.create(ctx)
 
         def destructor(ctx, session, exception):
@@ -247,13 +253,13 @@ class ConfiguredSessionModule(ConfiguredModule):
 
         self.ctx.register(self.ctx_member, constructor, destructor)
 
-    def create(self, ctx):
+    def create(self, ctx=None):
         """
         Creates a new, empty :class:`.Session`.
         """
         return self.Session(ctx, None)
 
-    def load(self, ctx, id):
+    def load(self, id, ctx=None):
         """
         Loads an existing session with given *id*.
         """

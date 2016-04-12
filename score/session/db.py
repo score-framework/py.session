@@ -54,10 +54,14 @@ class DbSession(Session):
         self._db_object._uuid = self.id
         self._db.add(self._db_object)
         flag_modified(self._db_object, '_data')
+        if not self._has_ctx:
+            self._db.commit()
 
     def _revert(self):
-        # will be handled by transaction rollback
-        pass
+        # the transaction will be rolled back
+        # by score.ctx, if it was configured
+        if not self._has_ctx:
+            self._db.rollback()
 
     def _set(self, key, value):
         if hasattr(self._db_object, key):
