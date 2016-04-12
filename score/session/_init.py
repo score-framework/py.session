@@ -24,14 +24,17 @@
 # the discretion of STRG.AT GmbH also the competent court, in whose district the
 # Licensee has his registered seat, an establishment or assets.
 
-import score.kvcache as kvcache
-from score.init import ConfiguredModule, parse_bool, parse_time_interval
+import abc
+from score.init import (
+    ConfiguredModule, ConfigurationError, parse_bool, parse_time_interval,
+    parse_dotted_path)
 import uuid
 
 
 defaults = {
-    'livedata': 'false',
+    'db.class': None,
     'kvcache.container': 'score.session',
+    'kvcache.livedata': 'false',
     'ctx.member': 'session',
     'cookie': 'session',
     'cookie.max_age': None,
@@ -42,16 +45,20 @@ defaults = {
 }
 
 
-def init(confdict, kvcache, ctx=None):
+def init(confdict, db=None, kvcache=None, ctx=None):
     """
     Initializes this module acoording to :ref:`our module initialization
     guidelines <module_initialization>` with the following configuration keys:
 
+    :confkey:`db.class` :faint:`[default=None]`
+        The :func:`path <score.init.parse_dotted_path>` to the database class,
+        that should be used as backend.
+
     :confkey:`kvcache.container` :faint:`[default=score.session]`
         The name of the :term:`cache container` to use for storing session
-        data.
+        data when using :mod:`score.kvcache` as backend.
 
-    :confkey:`livedata` :faint:`[default=false]`
+    :confkey:`kvcache.livedata` :faint:`[default=false]`
         This value defines whether sessions must always pull the newest session
         data for every operation. This has the advantage that all session data
         will be immediately up-to-date across all processes using the same
@@ -97,25 +104,77 @@ def init(confdict, kvcache, ctx=None):
     """
     conf = defaults.copy()
     conf.update(confdict)
-    livedata = parse_bool(conf['livedata'])
-    container = kvcache[conf['kvcache.container']]
     ctx_member = None
     if ctx and conf['ctx.member'] not in (None, 'None'):
         ctx_member = conf['ctx.member']
-    cookie_kwargs = None
-    if conf['cookie'] and conf['cookie'] != 'None':
-        cookie_kwargs = {
-            'name': conf['cookie'],
-            'path': conf['cookie.path'],
-            'domain': conf['cookie.domain'],
-            'secure': parse_bool(conf['cookie.secure']),
-            'httponly': parse_bool(conf['cookie.httponly']),
-        }
-        if conf['cookie.max_age']:
-            cookie_kwargs['max_age'] = \
-                parse_time_interval(conf['cookie.max_age'])
-    return ConfiguredSessionModule(
-        container, livedata, ctx, ctx_member, cookie_kwargs)
+    cookie_kwargs = parse_cookie_kwargs(conf)
+    session = ConfiguredSessionModule(ctx, ctx_member, cookie_kwargs)
+    session.Session = _init_db_backend(conf, session, db)
+    if not session.Session:
+        session.Session = _init_kvcache_backend(conf, session, kvcache)
+        if not session.Session:
+            import score.session
+            raise ConfigurationError(
+                score.session, 'Neither kvcache nor db backend configured')
+    return session
+
+
+def _init_db_backend(conf, session, db):
+    if not db:
+        return None
+    if 'db.class' not in conf:
+        return None
+    if not conf['db.class'] or conf['db.class'] == 'None':
+        return None
+    from .db import DbSessionMixin, DbSession
+    from zope.sqlalchemy import ZopeTransactionExtension
+    class_ = parse_dotted_path(conf['db.class'])
+    if not issubclass(class_, DbSessionMixin):
+        import score.session
+        raise ConfigurationError(
+            score.session, 'Configured `db.class` must inherit DbSessionMixin')
+    if db.ctx_member:
+        def session(self):
+            return getattr(self._ctx, db.ctx_member)
+    else:
+        def session(self):
+            if not hasattr(self, '_db_session'):
+                zope_tx = ZopeTransactionExtension(
+                    transaction_manager=self._ctx.tx_manager)
+                self._db_session = db.Session(extension=zope_tx)
+            return self._db_session
+    return type('ConfiguredDbSession', (DbSession,), {
+        '_conf': session,
+        '_db_class': class_,
+        '_db': property(session),
+    })
+
+
+def _init_kvcache_backend(conf, session, kvcache):
+    if not kvcache:
+        return None
+    from ._kvcache import KvcacheSession
+    return type('ConfiguredKvcacheSession', (KvcacheSession,), {
+        '_conf': session,
+        '_livedata': parse_bool(conf['kvcache.livedata']),
+        '_container': kvcache[conf['kvcache.container']],
+    })
+
+
+def parse_cookie_kwargs(conf):
+    if not conf['cookie'] or conf['cookie'] == 'None':
+        return None
+    cookie_kwargs = {
+        'name': conf['cookie'],
+        'path': conf['cookie.path'],
+        'domain': conf['cookie.domain'],
+        'secure': parse_bool(conf['cookie.secure']),
+        'httponly': parse_bool(conf['cookie.httponly']),
+    }
+    if conf['cookie.max_age']:
+        cookie_kwargs['max_age'] = \
+            parse_time_interval(conf['cookie.max_age'])
+    return cookie_kwargs
 
 
 class ConfiguredSessionModule(ConfiguredModule):
@@ -124,10 +183,8 @@ class ConfiguredSessionModule(ConfiguredModule):
     <score.init.ConfiguredModule>`.
     """
 
-    def __init__(self, cache, livedata, ctx, ctx_member, cookie_kwargs):
+    def __init__(self, ctx, ctx_member, cookie_kwargs):
         super().__init__(__package__)
-        self.cache = cache
-        self.livedata = livedata
         self.ctx = ctx
         self.ctx_member = ctx_member
         self.cookie_kwargs = cookie_kwargs
@@ -164,20 +221,19 @@ class ConfiguredSessionModule(ConfiguredModule):
 
         def constructor(ctx):
             if hasattr(ctx, id_member):
-                return self.load(getattr(ctx, id_member))
+                return self.load(ctx, getattr(ctx, id_member))
             if self.cookie_kwargs and hasattr(ctx, 'http'):
-                return self.load(
-                    ctx.http.request.cookies.get(self.cookie_kwargs['name'],
-                                                 None))
-            return self.create()
+                id = ctx.http.request.cookies.get(
+                    self.cookie_kwargs['name'], None)
+                return self.load(ctx, id)
+            return self.create(ctx)
 
         def destructor(ctx, session, exception):
             setattr(ctx, id_member, session.id)
-            if not self.livedata:
-                if exception:
-                    session.revert()
-                else:
-                    session.store()
+            if exception:
+                session.revert()
+            else:
+                session.store()
             if 'max_age' in self.cookie_kwargs:
                 # the next part is only relevant if we are not setting the
                 # response cookie anyway in the global context destruction
@@ -191,97 +247,125 @@ class ConfiguredSessionModule(ConfiguredModule):
 
         self.ctx.register(self.ctx_member, constructor, destructor)
 
-    def create(self):
+    def create(self, ctx):
         """
         Creates a new, empty :class:`.Session`.
         """
-        return Session(self, None)
+        return self.Session(ctx, None)
 
-    def load(self, id):
+    def load(self, ctx, id):
         """
         Loads an existing session with given *id*.
         """
-        return Session(self, id)
+        return self.Session(ctx, id)
 
 
-class Session:
+class Session(abc.ABC):
     """
-    A dict-like object managing session data. If the module was not configured
-    to operate on up-to-date session data (see ``livedata`` setting of
-    :func:`.init`), the modified session information is persisted when this
-    object is destroyed. You can also call :meth:`.store()` manually to make the
-    data of this session available to other processes.
+    A dict-like object managing session data. The modified session information
+    is persisted when this object is destroyed. You can also call
+    :meth:`.store()` manually to make the data of this session available to
+    other processes.
     """
 
-    def __init__(self, conf, id):
-        self._conf = conf
-        if not id:
+    def __init__(self, ctx, id):
+        self._ctx = ctx
+        self._was_changed = False
+        self._is_dirty = False
+        if not id or not self._id_is_valid(id):
             id = None
-        else:
-            # validate cookie id
-            try:
-                self._conf.cache[id]
-            except kvcache.NotFound:
-                id = None
         self.id = id
         self._original_id = id
-        self._changed = False
-        self.__data = None
 
     def __del__(self):
         self.store()
-
-    def revert(self):
-        """
-        Throws away all changes to the current session. This will obviously not
-        work, if the module was configured to operate on live data.
-        """
-        if self.__data is None or self._conf.livedata:
-            return
-        self._changed = False
-        self.__data = None
 
     def store(self):
         """
         Persists the information in this session instance.
         """
-        if not self._changed or self.__data is None:
-            return
-        self._conf.cache[self.id] = self.__data
+        if self._is_dirty:
+            self._store()
+
+    def revert(self):
+        """
+        Throws away all changes to the current session.
+        """
+        self._is_dirty = False
+        self._revert()
+
+    def was_changed(self):
+        """
+        Returns a `bool` indicating whether a modifying operation was
+        performed on this session.
+        """
+        return self._was_changed
+
+    def _mark_dirty(self):
+        self._was_changed = True
+        self._is_dirty = True
+
+    # Functions, that need to be implemented by sub-classes
+
+    @abc.abstractmethod
+    def _id_is_valid(self, id):
+        return False
+
+    @abc.abstractmethod
+    def _store(self):
+        pass
+
+    @abc.abstractmethod
+    def _revert(self):
+        pass
+
+    @abc.abstractmethod
+    def _contains(self, key):
+        return False
+
+    @abc.abstractmethod
+    def _get(self, key):
+        raise KeyError(key)
+
+    @abc.abstractmethod
+    def _set(self, key, value):
+        pass
+
+    @abc.abstractmethod
+    def _del(self, key):
+        raise KeyError(key)
+
+    @abc.abstractmethod
+    def _iter(self):
+        raise StopIteration()
+
+    # The rest of these functions implement the dict interface using the
+    # abstract functions above.
 
     def __contains__(self, key):
         if self.id is None:
             return False
-        return key in self._data
+        return self._contains(key)
 
     def __getitem__(self, key):
         if self.id is None:
             raise KeyError(key)
-        return self._data[key]
+        return self._get(key)
 
     def __setitem__(self, key, value):
         if self.id is None:
             self.id = str(uuid.uuid4())
-        self._data[key] = value
-        self._changed = True
-        if self._conf.livedata:
-            self.store()
+        self._set(key, value)
+        self._mark_dirty()
 
     def __delitem__(self, key):
         if self.id is None:
             return
-        if self._conf.livedata and key not in self._data:
-            return
-        # we could test if the key is actually present in the session _data, as
-        # above, but that would mean we would miss an opportunity to persist
-        # this session, although the develepor explicitly manipulated its
-        # content by deleting a key. this might be relevant when multiple
-        # processes access the same session.
-        self._changed = True
-        del self._data[key]
+        self._del(key)
+        self._mark_dirty()
 
     def __iter__(self):
-        return iter(self._data)
+        return self._iter()
 
     def get(self, key, default=None):
         try:
@@ -290,13 +374,15 @@ class Session:
             return default
 
     def items(self):
-        return self._data.items()
+        for key in self:
+            yield (key, self[key])
 
     def keys(self):
-        return self._data.keys()
+        yield from self
 
     def values(self):
-        return self._data.values()
+        for key in self:
+            yield self[key]
 
     def pop(self, key, default=None):
         result = self.get(key, default)
@@ -304,9 +390,13 @@ class Session:
         return result
 
     def popitem(self):
-        result = self._data.popitem()
-        self._changed = True
-        return result
+        try:
+            key = next(self)
+        except StopIteration:
+            raise KeyError()
+        value = self[key]
+        del(self[key])
+        return value
 
     def setdefault(self, key, default=None):
         try:
@@ -316,24 +406,54 @@ class Session:
             return default
 
     def update(self, other):
-        self._data.update(other)
-        if self._conf.livedata:
-            self.store()
+        for key, value in other:
+            self[key] = value
 
     def clear(self):
-        self._changed = True
-        self._data.clear()
-        if self._conf.livedata:
-            self.store()
+        for key in self:
+            del(self[key])
 
-    def was_changed(self):
-        return self._changed
+
+class DictSession(Session):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._cached_dict = None
+
+    @abc.abstractmethod
+    def _create_dict(self):
+        return {}
 
     @property
-    def _data(self):
-        if self.__data is None or self._conf.livedata:
-            try:
-                self.__data = self._conf.cache[self.id]
-            except kvcache.NotFound:
-                self.__data = {}
-        return self.__data
+    def _dict(self):
+        if self._cached_dict is None:
+            self._cached_dict = self._create_dict()
+        return self._cached_dict
+
+    def __iter__(self):
+        return iter(self._dict)
+
+    def items(self):
+        return self._dict.items()
+
+    def keys(self):
+        return self._dict.keys()
+
+    def values(self):
+        return self._dict.values()
+
+    def _contains(self, key):
+        return key in self._dict
+
+    def _get(self, key):
+        return self._dict[key]
+
+    def _set(self, key, value):
+        self._dict[key] = value
+
+    def _del(self, key):
+        del self._dict[key]
+
+    def _iter(self):
+        # should actually not be here, as we have implemented __iter__()
+        return iter(self._dict)
