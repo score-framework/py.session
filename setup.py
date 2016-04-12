@@ -34,7 +34,7 @@ with open(os.path.join(here, 'README.rst')) as f:
 
 setup(
     name='score.session',
-    version='0.3.5',
+    version='0.4',
     description='Session management for The SCORE Framework',
     long_description=README,
     author='strg.at',
@@ -46,7 +46,7 @@ setup(
     zip_safe=False,
     license='LGPL',
     classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
         'Environment :: Console',
         'Environment :: Web Environment',
         'Framework :: Pyramid',
