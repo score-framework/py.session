@@ -1,4 +1,4 @@
-# Copyright © 2015 STRG.AT GmbH, Vienna, Austria
+# Copyright © 2015,2016 STRG.AT GmbH, Vienna, Austria
 #
 # This file is part of the The SCORE Framework.
 #
@@ -26,6 +26,6 @@
 
 from ._init import init, ConfiguredSessionModule, Session
 
-__version__ = '0.4.0'
+__version__ = '0.4.1'
 
 __all__ = ('init', 'ConfiguredSessionModule', 'Session')
