@@ -31,7 +31,16 @@ development:
         score.kvcache
 
     [session]
+    # cookies are allowed on non-HTTPS sites during development:
     cookie.secure = False
+
+    [kvcache]
+    # default backend, we're configuring a sqlite file in
+    # the same folder as this config file:
+    backend.default = score.kvcache.backend.FileCache
+    backend.default.path = ${here}/_cache.sqlite3
+    # session cache:
+    container.score.session.backend = default
 
 You should now have a new :term:`context member` called *session*, which
 behaves just like a regular `dict`. It will start out without an id, but will
