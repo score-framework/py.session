@@ -197,7 +197,7 @@ class ConfiguredSessionModule(ConfiguredModule):
         self.cookie_kwargs = cookie_kwargs
         if ctx and ctx_member:
             self.__register_ctx_member()
-        if 'max_age' in cookie_kwargs:
+        if cookie_kwargs and 'max_age' in cookie_kwargs:
             # keep the client's cookie alive by sending him the cookie with each
             # response
             id_member = self.ctx_member + '_id'
@@ -250,7 +250,7 @@ class ConfiguredSessionModule(ConfiguredModule):
                 session.revert()
             else:
                 session.store()
-            if 'max_age' in self.cookie_kwargs:
+            if self.cookie_kwargs and 'max_age' in self.cookie_kwargs:
                 # the next part is only relevant if we are not setting the
                 # response cookie anyway in the global context destruction
                 # listener (see __init__() of this class)
