@@ -256,7 +256,7 @@ class ConfiguredSessionModule(ConfiguredModule):
                 # listener (see __init__() of this class)
                 return
             if self.cookie_kwargs and hasattr(ctx, 'http') and not exception:
-                if session._original_id is None and session.id:
+                if session.id and session._original_id != session.id:
                     kwargs = self.cookie_kwargs.copy()
                     kwargs['value'] = session.id
                     ctx.http.response.set_cookie(**kwargs)
