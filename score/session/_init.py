@@ -1,4 +1,4 @@
-# Copyright © 2015,2016 STRG.AT GmbH, Vienna, Austria
+# Copyright © 2015-2017 STRG.AT GmbH, Vienna, Austria
 #
 # This file is part of the The SCORE Framework.
 #
@@ -197,7 +197,7 @@ class ConfiguredSessionModule(ConfiguredModule):
         self.cookie_kwargs = cookie_kwargs
         if ctx and ctx_member:
             self.__register_ctx_member()
-        if ctx and 'max_age' in cookie_kwargs:
+        if ctx and cookie_kwargs and 'max_age' in cookie_kwargs:
             # keep the client's cookie alive by sending him the cookie with each
             # response
             id_member = self.ctx_member + '_id'
@@ -250,13 +250,13 @@ class ConfiguredSessionModule(ConfiguredModule):
                 session.revert()
             else:
                 session.store()
-            if 'max_age' in self.cookie_kwargs:
+            if self.cookie_kwargs and 'max_age' in self.cookie_kwargs:
                 # the next part is only relevant if we are not setting the
                 # response cookie anyway in the global context destruction
                 # listener (see __init__() of this class)
                 return
             if self.cookie_kwargs and hasattr(ctx, 'http') and not exception:
-                if session._original_id is None and session.id:
+                if session.id and session._original_id != session.id:
                     kwargs = self.cookie_kwargs.copy()
                     kwargs['value'] = session.id
                     ctx.http.response.set_cookie(**kwargs)
