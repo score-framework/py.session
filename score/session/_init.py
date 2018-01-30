@@ -197,7 +197,7 @@ class ConfiguredSessionModule(ConfiguredModule):
         self.cookie_kwargs = cookie_kwargs
         if ctx and ctx_member:
             self.__register_ctx_member()
-        if 'max_age' in cookie_kwargs:
+        if ctx and 'max_age' in cookie_kwargs:
             # keep the client's cookie alive by sending him the cookie with each
             # response
             id_member = self.ctx_member + '_id'
