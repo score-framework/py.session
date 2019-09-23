@@ -402,7 +402,10 @@ class Session(abc.ABC):
 
     def pop(self, key, default=None):
         result = self.get(key, default)
-        del self[key]
+        try:
+            del self[key]
+        except KeyError:
+            pass
         return result
 
     def popitem(self):
