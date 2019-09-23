@@ -63,8 +63,8 @@ def init(confdict, db=None, kvcache=None, ctx=None):
         This value defines whether sessions must always pull the newest session
         data for every operation. This has the advantage that all session data
         will be immediately up-to-date across all processes using the same
-        session, but also the disadvantage that it will make using the session a
-        lot slower.
+        session, but also the disadvantage that it will make using the session
+        a lot slower.
 
     :confkey:`ctx.member` :faint:`[default=session]`
         This is the name of the :term:`context member`, that should be
@@ -199,8 +199,8 @@ class ConfiguredSessionModule(ConfiguredModule):
         if ctx and ctx_member:
             self.__register_ctx_member()
         if ctx and cookie_kwargs and 'max_age' in cookie_kwargs:
-            # keep the client's cookie alive by sending him the cookie with each
-            # response
+            # keep the client's cookie alive by sending him the cookie with
+            # each response
             id_member = self.ctx_member + '_id'
 
             @ctx.on_destroy
@@ -230,9 +230,9 @@ class ConfiguredSessionModule(ConfiguredModule):
         def constructor(ctx):
             if hasattr(self.Session, '_db_conf'):
                 if self.Session._db_conf.ctx_member:
-                    # if we are making use of score.db's context member, we must
-                    # make sure it is initialized before this context member.
-                    # otherwise the database session (ctx.db) might get
+                    # if we are making use of score.db's context member, we
+                    # must make sure it is initialized before this context
+                    # member. otherwise the database session (ctx.db) might get
                     # destroyed before this member (ctx.session), in which case
                     # we would have no database session to persist our session
                     # object with.
