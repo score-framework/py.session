@@ -43,6 +43,7 @@ defaults = {
     'cookie.domain': None,
     'cookie.secure': True,
     'cookie.httponly': True,
+    'cookie.samesite': None,
 }
 
 
@@ -101,6 +102,10 @@ def init(confdict, db=None, kvcache=None, ctx=None):
         application (using XSS_, for example).
 
         .. _XSS: https://en.wikipedia.org/wiki/Cross-site_scripting
+
+    :confkey:`cookie.samesite` :faint:`[default=None]`
+        The SameSite parameter of the cookie, must be either 'Lax' or 'Strict'
+        if set.
 
     """
     conf = defaults.copy()
@@ -172,12 +177,21 @@ def _init_kvcache_backend(conf, session, kvcache):
 def parse_cookie_kwargs(conf):
     if not conf['cookie'] or conf['cookie'] == 'None':
         return None
+    samesite = conf['cookie.samesite']
+    if samesite and samesite.strip().lower() != 'none':
+        samesite = samesite.strip()
+        samesite = samesite[0].upper() + samesite[1:].lower()
+        if samesite not in ('Strict', 'Lax'):
+            raise ValueError('cookie.samesite must be "Strict" or "Lax"')
+    else:
+        samesite = None
     cookie_kwargs = {
         'name': conf['cookie'],
         'path': conf['cookie.path'],
         'domain': conf['cookie.domain'],
         'secure': parse_bool(conf['cookie.secure']),
         'httponly': parse_bool(conf['cookie.httponly']),
+        'samesite': samesite,
     }
     if conf['cookie.max_age']:
         cookie_kwargs['max_age'] = \
