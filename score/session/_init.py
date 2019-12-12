@@ -328,8 +328,9 @@ class Session(abc.ABC, collections.abc.MutableMapping):
         """
         Throws away all changes to the current session.
         """
-        self._is_dirty = False
-        self._revert()
+        if self._is_dirty:
+            self._revert()
+            self._is_dirty = False
 
     def was_changed(self):
         """
