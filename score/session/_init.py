@@ -166,7 +166,7 @@ def _init_orm_backend(conf, session, orm, ctx):
         '_conf': session,
         '_orm_conf': orm,
         '_orm_class': class_,
-        '_orm': property(lambda self: getattr(self._ctx, orm.ctx_member)),
+        '_orm': property(lambda self: orm.get_session(self._ctx)),
     })
 
 
