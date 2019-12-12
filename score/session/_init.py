@@ -163,7 +163,7 @@ def _init_orm_backend(conf, session, orm, ctx):
         '_conf': session,
         '_orm_conf': orm,
         '_orm_class': class_,
-        '_db': property(session),
+        '_orm': property(session),
     })
 
 
