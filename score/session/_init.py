@@ -26,10 +26,12 @@
 # the Licensee has his registered seat, an establishment or assets.
 
 import abc
+import collections.abc
+import uuid
+
 from score.init import (
     ConfiguredModule, ConfigurationError, parse_bool, parse_time_interval,
     parse_dotted_path)
-import uuid
 
 
 defaults = {
@@ -295,7 +297,7 @@ class ConfiguredSessionModule(ConfiguredModule):
         return self.Session(ctx, id)
 
 
-class Session(abc.ABC):
+class Session(abc.ABC, collections.abc.MutableMapping):
     """
     A dict-like object managing session data. The modified session information
     is persisted when this object is destroyed. You can also call
@@ -340,7 +342,7 @@ class Session(abc.ABC):
         self._was_changed = True
         self._is_dirty = True
 
-    # Functions, that need to be implemented by sub-classes
+    # Functions that need to be implemented by sub-classes
 
     @abc.abstractmethod
     def _id_is_valid(self, id):
@@ -375,7 +377,7 @@ class Session(abc.ABC):
         raise StopIteration()
 
     # The rest of these functions implement the dict interface using the
-    # abstract functions above.
+    # functions above.
 
     def __contains__(self, key):
         if self.id is None:
@@ -402,54 +404,8 @@ class Session(abc.ABC):
     def __iter__(self):
         return self._iter()
 
-    def get(self, key, default=None):
-        try:
-            return self[key]
-        except KeyError:
-            return default
-
-    def items(self):
-        for key in self:
-            yield (key, self[key])
-
-    def keys(self):
-        yield from self
-
-    def values(self):
-        for key in self:
-            yield self[key]
-
-    def pop(self, key, default=None):
-        result = self.get(key, default)
-        try:
-            del self[key]
-        except KeyError:
-            pass
-        return result
-
-    def popitem(self):
-        try:
-            key = next(self)
-        except StopIteration:
-            raise KeyError()
-        value = self[key]
-        del(self[key])
-        return value
-
-    def setdefault(self, key, default=None):
-        try:
-            return self[key]
-        except KeyError:
-            self[key] = default
-            return default
-
-    def update(self, other):
-        for key, value in other:
-            self[key] = value
-
-    def clear(self):
-        for key in self:
-            del(self[key])
+    def __len__(self):
+        return sum(1 for _ in self._iter())
 
 
 class DictSession(Session):
@@ -495,3 +451,6 @@ class DictSession(Session):
     def _iter(self):
         # should actually not be here, as we have implemented __iter__()
         return iter(self._dict)
+
+    def __len__(self):
+        return len(self._dict)
