@@ -75,8 +75,8 @@ class UUID(TypeDecorator):
 
 
 class OrmSessionMixin:
-    _uuid = Column(UUID, nullable=False, unique=True)
-    _data = Column(JSON, nullable=False)
+    id = Column(UUID, nullable=False, unique=True, primary_key=True)
+    data = Column(JSON, nullable=False)
 
 
 class OrmSession(Session):
@@ -86,7 +86,7 @@ class OrmSession(Session):
         self.__orm_object = None
 
     def _id_is_valid(self, id):
-        return self._orm.query(exists().where(self._orm_class._uuid == id)).\
+        return self._orm.query(exists().where(self._orm_class.id == id)).\
             scalar()
 
     @property
@@ -94,18 +94,18 @@ class OrmSession(Session):
         if self.__orm_object is None:
             if self._original_id:
                 self.__orm_object = self._orm.query(self._orm_class).\
-                    filter(self._orm_class._uuid == self._original_id).\
+                    filter(self._orm_class.id == self._original_id).\
                     first()
             else:
                 self.__orm_object = self._orm_class(
-                    _data=dict()
+                    data=dict()
                 )
         return self.__orm_object
 
     def _store(self):
-        self._orm_object._uuid = self.id
+        self._orm_object.id = self.id
         self._orm.add(self._orm_object)
-        flag_modified(self._orm_object, '_data')
+        flag_modified(self._orm_object, 'data')
         if not self._has_ctx:
             self._orm.commit()
 
@@ -119,25 +119,25 @@ class OrmSession(Session):
         if hasattr(self._orm_object, key):
             setattr(self._orm_object, key, value)
         else:
-            self._orm_object._data[key] = value
+            self._orm_object.data[key] = value
 
     def _del(self, key):
         if hasattr(self._orm_object, key):
             setattr(self._orm_object, key, None)
         else:
-            del(self._orm_object._data[key])
+            del(self._orm_object.data[key])
 
     def _contains(self, key):
         return (hasattr(self._orm_object, key)
-                or key in self._orm_object._data)
+                or key in self._orm_object.data)
 
     def _get(self, key):
         if hasattr(self._orm_object, key):
             return getattr(self._orm_object, key)
-        return self._orm_object._data[key]
+        return self._orm_object.data[key]
 
     def _iter(self):
         return chain((col.name
                       for col in self._orm_class.__table__.columns
-                      if col.name not in ('_uuid', '_data')),
-                     iter(self._orm_object._data))
+                      if col.name not in ('id', 'data')),
+                     iter(self._orm_object.data))
