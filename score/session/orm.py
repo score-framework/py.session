@@ -50,69 +50,70 @@ class JSONDict(TypeDecorator):
         return value
 
 
-class DbSessionMixin:
+class OrmSessionMixin:
     _uuid = Column(String(36), nullable=False, unique=True)
     _data = Column(JSONDict, nullable=False)
 
 
-class DbSession(Session):
+class OrmSession(Session):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.__db_object = None
+        self.__orm_object = None
 
     def _id_is_valid(self, id):
-        return self._db.query(exists().where(self._db_class._uuid == id)).\
+        return self._orm.query(exists().where(self._orm_class._uuid == id)).\
             scalar()
 
     @property
-    def _db_object(self):
-        if self.__db_object is None:
+    def _orm_object(self):
+        if self.__orm_object is None:
             if self._original_id:
-                self.__db_object = self._db.query(self._db_class).\
-                    filter(self._db_class._uuid == self._original_id).\
+                self.__orm_object = self._orm.query(self._orm_class).\
+                    filter(self._orm_class._uuid == self._original_id).\
                     first()
             else:
-                self.__db_object = self._db_class(
+                self.__orm_object = self._orm_class(
                     _data=dict()
                 )
-        return self.__db_object
+        return self.__orm_object
 
     def _store(self):
-        self._db_object._uuid = self.id
-        self._db.add(self._db_object)
-        flag_modified(self._db_object, '_data')
+        self._orm_object._uuid = self.id
+        self._orm.add(self._orm_object)
+        flag_modified(self._orm_object, '_data')
         if not self._has_ctx:
-            self._db.commit()
+            self._orm.commit()
 
     def _revert(self):
         # the transaction will be rolled back
         # by score.ctx, if it was configured
         if not self._has_ctx:
-            self._db.rollback()
+            self._orm.rollback()
 
     def _set(self, key, value):
-        if hasattr(self._db_object, key):
-            setattr(self._db_object, key, value)
+        if hasattr(self._orm_object, key):
+            setattr(self._orm_object, key, value)
         else:
-            self._db_object._data[key] = value
+            self._orm_object._data[key] = value
 
     def _del(self, key):
-        if hasattr(self._db_object, key):
-            setattr(self._db_object, key, None)
+        if hasattr(self._orm_object, key):
+            setattr(self._orm_object, key, None)
         else:
-            del(self._db_object._data[key])
+            del(self._orm_object._data[key])
 
     def _contains(self, key):
-        return hasattr(self._db_object, key) or key in self._db_object._data
+        return (hasattr(self._orm_object, key)
+                or key in self._orm_object._data)
 
     def _get(self, key):
-        if hasattr(self._db_object, key):
-            return getattr(self._db_object, key)
-        return self._db_object._data[key]
+        if hasattr(self._orm_object, key):
+            return getattr(self._orm_object, key)
+        return self._orm_object._data[key]
 
     def _iter(self):
         return chain((col.name
-                      for col in self._db_class.__table__.columns
+                      for col in self._orm_class.__table__.columns
                       if col.name not in ('_uuid', '_data')),
-                     iter(self._db_object._data))
+                     iter(self._orm_object._data))

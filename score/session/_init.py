@@ -33,7 +33,7 @@ import uuid
 
 
 defaults = {
-    'db.class': None,
+    'orm.class': None,
     'kvcache.container': 'score.session',
     'kvcache.livedata': 'false',
     'ctx.member': 'session',
@@ -47,12 +47,12 @@ defaults = {
 }
 
 
-def init(confdict, db=None, kvcache=None, ctx=None):
+def init(confdict, orm=None, kvcache=None, ctx=None):
     """
     Initializes this module acoording to :ref:`our module initialization
     guidelines <module_initialization>` with the following configuration keys:
 
-    :confkey:`db.class` :faint:`[default=None]`
+    :confkey:`orm.class` :faint:`[default=None]`
         The :func:`path <score.init.parse_dotted_path>` to the database class,
         that should be used as backend.
 
@@ -115,50 +115,51 @@ def init(confdict, db=None, kvcache=None, ctx=None):
         ctx_member = conf['ctx.member']
     cookie_kwargs = parse_cookie_kwargs(conf)
     session = ConfiguredSessionModule(ctx, ctx_member, cookie_kwargs)
-    session.Session = _init_db_backend(conf, session, db, ctx)
+    session.Session = _init_orm_backend(conf, session, orm, ctx)
     if not session.Session:
         session.Session = _init_kvcache_backend(conf, session, kvcache)
         if not session.Session:
             import score.session
             raise ConfigurationError(
-                score.session, 'Neither kvcache nor db backend configured')
+                score.session, 'Neither kvcache nor orm backend configured')
     return session
 
 
-def _init_db_backend(conf, session, db, ctx):
-    if not db:
+def _init_orm_backend(conf, session, orm, ctx):
+    if not orm:
         return None
-    if 'db.class' not in conf:
+    if 'orm.class' not in conf:
         return None
-    if not conf['db.class'] or conf['db.class'] == 'None':
+    if not conf['orm.class'] or conf['orm.class'] == 'None':
         return None
-    from .db import DbSessionMixin, DbSession
+    from .orm import OrmSessionMixin, OrmSession
     from zope.sqlalchemy import ZopeTransactionExtension
-    class_ = parse_dotted_path(conf['db.class'])
-    if not issubclass(class_, DbSessionMixin):
+    class_ = parse_dotted_path(conf['orm.class'])
+    if not issubclass(class_, OrmSessionMixin):
         import score.session
         raise ConfigurationError(
-            score.session, 'Configured `db.class` must inherit DbSessionMixin')
-    if ctx and db.ctx_member:
+            score.session,
+            'Configured `orm.class` must inherit OrmSessionMixin')
+    if ctx and orm.ctx_member:
         def session(self):
-            return getattr(self._ctx, db.ctx_member)
+            return getattr(self._ctx, orm.ctx_member)
     elif ctx:
         def session(self):
-            if not hasattr(self, '_db_session'):
+            if not hasattr(self, '_orm_session'):
                 zope_tx = ZopeTransactionExtension(
                     transaction_manager=self._ctx.tx_manager)
-                self._db_session = db.Session(extension=zope_tx)
-            return self._db_session
+                self._orm_session = orm.Session(extension=zope_tx)
+            return self._orm_session
     else:
         def session(self):
-            if not hasattr(self, '_db_session'):
-                self._db_session = db.Session(extension=[])
-            return self._db_session
-    return type('ConfiguredDbSession', (DbSession,), {
+            if not hasattr(self, '_orm_session'):
+                self._orm_session = orm.Session(extension=[])
+            return self._orm_session
+    return type('ConfiguredOrmSession', (OrmSession,), {
         '_has_ctx': ctx is not None,
         '_conf': session,
-        '_db_conf': db,
-        '_db_class': class_,
+        '_orm_conf': orm,
+        '_orm_class': class_,
         '_db': property(session),
     })
 
@@ -242,15 +243,15 @@ class ConfiguredSessionModule(ConfiguredModule):
         id_member = self.ctx_member + '_id'
 
         def constructor(ctx):
-            if hasattr(self.Session, '_db_conf'):
-                if self.Session._db_conf.ctx_member:
-                    # if we are making use of score.db's context member, we
+            if hasattr(self.Session, '_orm_conf'):
+                if self.Session._orm_conf.ctx_member:
+                    # if we are making use of score.sa.orm's context member, we
                     # must make sure it is initialized before this context
-                    # member. otherwise the database session (ctx.db) might get
-                    # destroyed before this member (ctx.session), in which case
-                    # we would have no database session to persist our session
-                    # object with.
-                    getattr(ctx, self.Session._db_conf.ctx_member)
+                    # member. otherwise the database session (ctx.orm) might
+                    # get destroyed before this member (ctx.session), in which
+                    # case we would have no database session to persist our
+                    # session object with.
+                    getattr(ctx, self.Session._orm_conf.ctx_member)
             if hasattr(ctx, id_member):
                 return self.load(getattr(ctx, id_member), ctx)
             if self.cookie_kwargs and hasattr(ctx, 'http'):
