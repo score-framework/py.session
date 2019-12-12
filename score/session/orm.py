@@ -102,6 +102,12 @@ class OrmSession(Session):
                 )
         return self.__orm_object
 
+    def __delitem__(self, key):
+        if hasattr(self._orm_object, key):
+            if getattr(self._orm_object, key) is None:
+                return
+        return super().__delitem__(key)
+
     def _store(self):
         self._orm_object.id = self.id
         self._orm.add(self._orm_object)

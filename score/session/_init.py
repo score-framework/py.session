@@ -391,13 +391,15 @@ class Session(abc.ABC, collections.abc.MutableMapping):
         return self._get(key)
 
     def __setitem__(self, key, value):
+        if self.get(key, self) == value:
+            return
         if self.id is None:
             self.id = str(uuid.uuid4())
         self._set(key, value)
         self._mark_dirty()
 
     def __delitem__(self, key):
-        if self.id is None:
+        if key not in self:
             return
         self._del(key)
         self._mark_dirty()
