@@ -28,6 +28,6 @@
 from ._init import init, ConfiguredSessionModule, Session
 
 
-__version__ = '0.4.7'
+__version__ = '0.5.0'
 
 __all__ = ('init', 'ConfiguredSessionModule', 'Session')
