@@ -112,14 +112,10 @@ class OrmSession(Session):
         self._orm_object.id = self.id
         self._orm.add(self._orm_object)
         flag_modified(self._orm_object, 'data')
-        if not self._has_ctx:
-            self._orm.commit()
 
     def _revert(self):
-        # the transaction will be rolled back
-        # by score.ctx, if it was configured
-        if not self._has_ctx:
-            self._orm.rollback()
+        # the transaction will be rolled back by score.ctx
+        pass
 
     def _set(self, key, value):
         if hasattr(self._orm_object, key):

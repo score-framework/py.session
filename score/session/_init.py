@@ -137,35 +137,34 @@ def _init_orm_backend(conf, session, orm, ctx):
         raise ConfigurationError(
             score.session,
             'Need score.sa.orm in order to use `orm.class`')
+    if not ctx:
+        import score.session
+        raise ConfigurationError(
+            score.session,
+            'Need score.ctx in order to use `orm.class`')
     from .orm import OrmSessionMixin, OrmSession
-    from zope.sqlalchemy import ZopeTransactionExtension
     class_ = parse_dotted_path(conf['orm.class'])
     if not issubclass(class_, OrmSessionMixin):
         import score.session
         raise ConfigurationError(
             score.session,
             'Configured `orm.class` must inherit OrmSessionMixin')
-    if ctx and orm.ctx_member:
-        def session(self):
-            return getattr(self._ctx, orm.ctx_member)
-    elif ctx:
-        def session(self):
-            if not hasattr(self, '_orm_session'):
-                zope_tx = ZopeTransactionExtension(
-                    transaction_manager=self._ctx.tx_manager)
-                self._orm_session = orm.Session(extension=zope_tx)
-            return self._orm_session
-    else:
-        def session(self):
-            if not hasattr(self, '_orm_session'):
-                self._orm_session = orm.Session(extension=[])
-            return self._orm_session
+    if not hasattr(orm, 'ctx'):
+        import score.session
+        raise ConfigurationError(
+            score.session,
+            'Configured score.sa.orm has not score.ctx configuration')
+    if ctx != orm.ctx:
+        import score.session
+        raise ConfigurationError(
+            score.session,
+            'Configured score.sa.orm uses different score.ctx dependency')
     return type('ConfiguredOrmSession', (OrmSession,), {
         '_has_ctx': ctx is not None,
         '_conf': session,
         '_orm_conf': orm,
         '_orm_class': class_,
-        '_orm': property(session),
+        '_orm': property(lambda self: getattr(self._ctx, orm.ctx_member)),
     })
 
 
@@ -248,22 +247,15 @@ class ConfiguredSessionModule(ConfiguredModule):
         id_member = self.ctx_member + '_id'
 
         def constructor(ctx):
-            if hasattr(self.Session, '_orm_conf'):
-                if self.Session._orm_conf.ctx_member:
-                    # if we are making use of score.sa.orm's context member, we
-                    # must make sure it is initialized before this context
-                    # member. otherwise the database session (ctx.orm) might
-                    # get destroyed before this member (ctx.session), in which
-                    # case we would have no database session to persist our
-                    # session object with.
-                    getattr(ctx, self.Session._orm_conf.ctx_member)
             if hasattr(ctx, id_member):
-                return self.load(getattr(ctx, id_member), ctx)
-            if self.cookie_kwargs and hasattr(ctx, 'http'):
+                session = self.load(getattr(ctx, id_member), ctx)
+            elif self.cookie_kwargs and hasattr(ctx, 'http'):
                 id = ctx.http.request.cookies.get(
                     self.cookie_kwargs['name'], None)
-                return self.load(id, ctx)
-            return self.create(ctx)
+                session = self.load(id, ctx)
+            else:
+                session = self.create(ctx)
+            return session
 
         def destructor(ctx, session, exception):
             setattr(ctx, id_member, session.id)
