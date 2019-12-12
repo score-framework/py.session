@@ -119,22 +119,22 @@ Backends
 --------
 
 The module is capable of storing session data in either of two backends: a
-:mod:`score.kvcache` :term:`container <cache container>`, or a :mod:`score.db`
-table.
+:mod:`score.kvcache` :term:`container <cache container>`, or a
+:mod:`score.sa.orm` table.
 
 Using :mod:`score.kvcache` is much easier, but does not allow you to access all
 sessions of a single user efficiently, for example. It merely stores a mapping
 of session ids to session data. This should really not come as a big surprise
 when using the key-value-cache as backend.
 
-The alternative backend is :mod:`score.db`. Its usage requires a bit more
+The alternative backend is :mod:`score.sa.orm`. Its usage requires a bit more
 configuration. Not only in your configuration file …
 
 .. code-block:: ini
     :emphasize-lines: 2
 
     [session]
-    db.class = path.to.Session
+    orm.class = path.to.Session
 
 … but also in your application: you will need a database class with an
 additional mixin from this package:
@@ -142,13 +142,13 @@ additional mixin from this package:
 .. code-block:: python
 
     from .storable import Storable
-    from score.db import IdType
-    from score.session.db import DbSessionMixin
+    from score.sa.orm import IdType
+    from score.session.orm import OrmSessionMixin
     from sqlalchemy import Column, ForeignKey
     from sqlalchemy.orm import relationship
 
 
-    class Session(Storable, DbSessionMixin):
+    class Session(Storable, OrmSessionMixin):
         user_id = Column(IdType, ForeignKey('_user.id'))
         user = relationship('User', backref='sessions')
 
