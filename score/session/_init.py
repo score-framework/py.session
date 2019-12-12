@@ -32,6 +32,8 @@ import uuid
 from score.init import (
     ConfiguredModule, ConfigurationError, parse_bool, parse_time_interval,
     parse_dotted_path)
+from transaction.interfaces import IDataManager
+from zope.interface import implementer
 
 
 defaults = {
@@ -204,6 +206,46 @@ def parse_cookie_kwargs(conf):
     return cookie_kwargs
 
 
+@implementer(IDataManager)
+class DataManager:
+
+    revert_data = None
+
+    def __init__(self, session_conf, ctx, session):
+        self.session_conf = session_conf
+        self.ctx = ctx
+        self.session = session
+        self.transaction_manager = ctx.tx_manager
+
+    def tpc_finish(self, transaction):
+        pass
+
+    def sortKey(self):
+        return 'score.auth(%d)' % (id(self.ctx),)
+
+    def tpc_abort(self, transaction):
+        if self.revert_data is not None and self.session.id:
+            self.session.clear()
+            self.session.update(self.revert_data)
+            self.revert_data = None
+
+    def abort(self, transaction):
+        self.session.revert()
+
+    def tpc_begin(self, transaction):
+        pass
+
+    def commit(self, transaction):
+        if self.session.id:
+            self.revert_data = {}
+            self.revert_data.update(self.session)
+            self.revert_data.pop('id', None)
+            self.session.store()
+
+    def tpc_vote(self, transaction):
+        pass
+
+
 class ConfiguredSessionModule(ConfiguredModule):
     """
     This module's :class:`configuration class
@@ -255,14 +297,11 @@ class ConfiguredSessionModule(ConfiguredModule):
                 session = self.load(id, ctx)
             else:
                 session = self.create(ctx)
+            ctx.tx.join(DataManager(self, ctx, session))
             return session
 
         def destructor(ctx, session, exception):
             setattr(ctx, id_member, session.id)
-            if exception:
-                session.revert()
-            else:
-                session.store()
             if self.cookie_kwargs and 'max_age' in self.cookie_kwargs:
                 # the next part is only relevant if we are not setting the
                 # response cookie anyway in the global context destruction
@@ -274,7 +313,7 @@ class ConfiguredSessionModule(ConfiguredModule):
                     kwargs['value'] = session.id
                     ctx.http.response.set_cookie(**kwargs)
 
-        self.ctx.register(self.ctx_member, constructor, destructor)
+        self.ctx.register(self.ctx_member, constructor, destructor=destructor)
 
     def create(self, ctx=None):
         """
