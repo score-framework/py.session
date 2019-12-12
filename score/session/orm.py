@@ -25,34 +25,18 @@
 # the discretion of STRG.AT GmbH also the competent court, in whose district
 # the Licensee has his registered seat, an establishment or assets.
 
+from itertools import chain
 
 from sqlalchemy import Column, String, exists
-from ._init import Session
-from itertools import chain
 from sqlalchemy.orm.attributes import flag_modified
-from sqlalchemy.types import TypeDecorator, VARCHAR
-import json
+from sqlalchemy.types import JSON
 
-
-class JSONDict(TypeDecorator):
-    "Represents an immutable structure as a json-encoded string."
-
-    impl = VARCHAR
-
-    def process_bind_param(self, value, dialect):
-        if value is not None:
-            value = json.dumps(value)
-        return value
-
-    def process_result_value(self, value, dialect):
-        if value is not None:
-            value = json.loads(value)
-        return value
+from ._init import Session
 
 
 class OrmSessionMixin:
     _uuid = Column(String(36), nullable=False, unique=True)
-    _data = Column(JSONDict, nullable=False)
+    _data = Column(JSON, nullable=False)
 
 
 class OrmSession(Session):
