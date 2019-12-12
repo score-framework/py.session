@@ -215,7 +215,7 @@ class DataManager:
         self.session_conf = session_conf
         self.ctx = ctx
         self.session = session
-        self.transaction_manager = ctx.tx_manager
+        self.transaction_manager = session_conf.ctx.get_tx(ctx)
 
     def tpc_finish(self, transaction):
         pass
@@ -270,7 +270,8 @@ class ConfiguredSessionModule(ConfiguredModule):
                     return
                 if not hasattr(ctx, 'http'):
                     return
-                if hasattr(ctx, self.ctx_member):
+                ctx_meta = self.ctx.get_meta(ctx)
+                if ctx_meta.member_constructed(ctx_member):
                     session_id = getattr(ctx, ctx_member).id
                 elif hasattr(ctx, id_member):
                     session_id = getattr(ctx, id_member)
@@ -297,7 +298,8 @@ class ConfiguredSessionModule(ConfiguredModule):
                 session = self.load(id, ctx)
             else:
                 session = self.create(ctx)
-            ctx.tx.join(DataManager(self, ctx, session))
+            tx = self.ctx.get_tx(ctx).get()
+            tx.join(DataManager(self, ctx, session))
             return session
 
         def destructor(ctx, session, exception):
