@@ -126,12 +126,15 @@ def init(confdict, orm=None, kvcache=None, ctx=None):
 
 
 def _init_orm_backend(conf, session, orm, ctx):
-    if not orm:
-        return None
     if 'orm.class' not in conf:
         return None
     if not conf['orm.class'] or conf['orm.class'] == 'None':
         return None
+    if not orm:
+        import score.session
+        raise ConfigurationError(
+            score.session,
+            'Need score.sa.orm in order to use `orm.class`')
     from .orm import OrmSessionMixin, OrmSession
     from zope.sqlalchemy import ZopeTransactionExtension
     class_ = parse_dotted_path(conf['orm.class'])
