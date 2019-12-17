@@ -32,6 +32,7 @@ from sqlalchemy import Column, exists
 from sqlalchemy.dialects.postgresql import UUID as PSQL_UUID
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.types import TypeDecorator, CHAR, JSON
+from zope.sqlalchemy import mark_changed
 
 from ._init import Session
 
@@ -112,6 +113,7 @@ class OrmSession(Session):
         self._orm_object.id = self.id
         self._orm.add(self._orm_object)
         flag_modified(self._orm_object, 'data')
+        mark_changed(self._orm, self._conf.ctx.get_tx(self._ctx).get(), True)
 
     def _revert(self):
         # the transaction will be rolled back by score.ctx
