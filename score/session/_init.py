@@ -237,10 +237,11 @@ class DataManager:
 
     def commit(self, transaction):
         if self.session.id:
-            self.revert_data = {}
-            self.revert_data.update(self.session)
-            self.revert_data.pop('id', None)
+            revert_data = {}
+            revert_data.update(self.session)
+            revert_data.pop('id', None)
             self.session.store()
+            self.revert_data = revert_data
 
     def tpc_vote(self, transaction):
         pass
