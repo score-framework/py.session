@@ -1,5 +1,5 @@
 # Copyright © 2015-2018 STRG.AT GmbH, Vienna, Austria
-# Copyright © 2019 Necdet Can Ateşman <can@atesman.at>, Vienna, Austria
+# Copyright © 2019-2020 Necdet Can Ateşman <can@atesman.at>, Vienna, Austria
 #
 # This file is part of the The SCORE Framework.
 #
@@ -27,6 +27,7 @@
 
 import abc
 import collections.abc
+from copy import deepcopy
 import uuid
 
 from score.init import (
@@ -422,7 +423,7 @@ class Session(abc.ABC, collections.abc.MutableMapping):
     def __getitem__(self, key):
         if self.id is None:
             raise KeyError(key)
-        return self._get(key)
+        return deepcopy(self._get(key))
 
     def __setitem__(self, key, value):
         if self.get(key, self) == value:
